@@ -1,0 +1,10 @@
+character encodings
+ASCII
+Unicode, UTF-8
+
+character -> code point -> code unit(s)
+"A" -> 65 -> 0x41
+"π" -> 960 -> 0xCF 0x80
+
+
+context: memory leak, extract value
