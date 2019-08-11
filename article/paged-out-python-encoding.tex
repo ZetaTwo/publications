@@ -102,9 +102,7 @@ The problem is that you are trying to interpret an arbitrary sequence of bytes a
 \vfill\null
 
 
-Let's remind ourselves on how character encodings work. The end goal is to represent a character such as "A". Computers work with numbers (more precisely bits) and not characters, so we translate the character into a number. In the ASCII encoding, this translates to the number 65. We call this the codepoint. This codepoint is then encoded using a single byte 0x41. This is simple in ASCII because there is a one to one to one mapping between characters, codepoints and bytes and can this be implicitly done without thinking about it.
-
-Strings in python are not limited to ASCII but can represent the full Unicode range using the UTF-8 encoding and thus if we take a character such as \textit{ä} we instead get:
+Let's remind ourselves about character encodings. The goal is to represent a character such as "A". Computers work with numbers (more precisely bits), not characters, so we translate the character into a number. In the ASCII encoding, this is the number 65. We call this the codepoint. This value is then encoded using a single byte 0x41. This is simple in ASCII because there is a one to one to one mapping between characters, codepoints and bytes and this can be implicitly done without thinking about it. Python strings are not limited to ASCII but can represent the full Unicode range. If we use the UTF-8 encoding and take the character \textit{ä} we instead get:
 
 \begin{table}[h]
 \centering
@@ -117,7 +115,8 @@ A         & 65        & 0x41      & UTF-8    \\ \hline
 \end{tabular}
 \end{table}
 
-Specifically, one character maps to a codepoint which is encoded with more than one byte. To solve the initial problem, instead of trying to convert the "haystack" bytes into a string and search for a substring, you convert the "needle" marker into a sequence of UTF-8 bytes and search for that sequence of bytes in the haystack. When it is found, you can extract bytes relative to that offset and process then accordingly, in this case, convert them to a 32-bit number. This slightly modified diagram describes this approach.
+\vspace*{-0.7\baselineskip}
+Specifically, one character maps to a codepoint which is encoded with more than one byte and not every sequence of bytes represents a valid character. This is what causes the problem. To solve this, instead of trying to convert the "haystack" bytes into a string and search for a substring, you convert the "needle" marker into a sequence of UTF-8 bytes and search for that sequence of bytes in the haystack. When it is found, you can extract bytes relative to that offset and process them accordingly, in this case, convert them to a 32-bit number. This slightly modified diagram describes this approach.
 
 \begin{tikzpicture}
 
@@ -143,7 +142,7 @@ Specifically, one character maps to a codepoint which is encoded with more than 
 
 \end{tikzpicture}
 
-Which, translated to Python 3 code looks like this:
+Which, translated to Python 3 code, looks like this:
 
 \begin{minted}{python}
 def extract_leaked_pointer_python3(leak):
@@ -151,9 +150,10 @@ def extract_leaked_pointer_python3(leak):
     start = leak.find(marker)
     leak_start = start + len(marker)
     leak_data = leak[leak_start:leak_start+4]
-    return struct.unpack('<Q', leak_data)[0]
+    return struct.unpack('<I', leak_data)[0]
 \end{minted}
 
-In conclusion, don't try to convert bytes that don't represent text, into text. Instead convert the text into bytes, use it to extract the relevant bytes and then process them accordingly. Now your exploit works in Python 3 and you can leave another legacy language behind.
+\vspace*{-0.7\baselineskip}
+In short, don't try to convert bytes that don't represent text, into text. Instead convert the text into bytes, use it to extract the relevant bytes and then process them accordingly. Now your exploit works in Python 3 and you can leave another legacy language behind.
 
 \end{document}
