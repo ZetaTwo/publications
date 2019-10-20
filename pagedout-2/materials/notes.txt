@@ -1,10 +1,8 @@
-character encodings
-ASCII
-Unicode, UTF-8
+Block ciphers: AES, XTEA
+Stream ciphers: RC4, ChaCha
+Hashes: MD5, SHA1, SHA2
+Constants, inverse sub
+Feistel network
+RC4 mixer
 
-character -> code point -> code unit(s)
-"A" -> 65 -> 0x41
-"π" -> 960 -> 0xCF 0x80
-
-
-context: memory leak, extract value
+Ida python script?
