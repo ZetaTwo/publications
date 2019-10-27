@@ -25,7 +25,7 @@
 \definecolor{light-gray}{rgb}{0.95,0.95,0.95}
 \setminted{bgcolor=light-gray}  % this line causes the problem
 
-\setlength{\parindent}{1mm}
+\setlength{\parindent}{0mm}
 \setlength{\parskip}{0mm}
 
 \tikzstyle{string} = [rectangle, rounded corners, inner sep=2mm, text centered, draw=black, fill=red!30]
@@ -40,14 +40,14 @@
 %\maketitle
 \section*{Identifying crypto\footnote{Crypto stands for cryptography} functions}
 
-When reverse engineering programs you might encounter code that make use of various cryptographic functions. These functions can be both large and difficult to to understand making you waste valuable time on reverse engineering them. This article will explain a few methods to more easily identify some of the most popular cryptographic functions which will hopefully save you time in your reverse engineering efforts.
+When reverse engineering programs you might encounter code that makes use of various cryptographic functions. These functions can be both large and difficult to understand making you waste valuable time on reverse engineering them. This article will explain a few methods to more easily identify some of the most popular cryptographic functions which will hopefully save you time in your reverse engineering efforts.
 \vspace*{-1.4\baselineskip}
 
 
 \subsection*{Constants}
 \vspace*{-0.2\baselineskip}
 
-The first and easiest way to identify some cryptographic functions is to utilize the fact that many of these algorithms make use of specific constants in their caluclations. Identifying and looking up these constans can help you quickly identify some algorithms. For example the MD5 hashing algorithm initializes a state with the following four 32bit values: $\mathtt{0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476}$. Be careful though since SHA1 also uses these four values but additionally it uses $\mathtt{0xc3d2e1f0}$ in its initialization. Another thing to look out for is some optimizations. Several algorithms, including the XTEA block cipher, adds a constant ($\mathtt{0x9e3779b9}$ in the XTEA case) in each iteration. Since numbers are represented with two's complement, it means that adding a value $X$ is the same as subtracting $\lnot X+1$, that is the bitwise negation of $X$, plus one. This means that, in the case of XTEA, you will sometimes instead see that the code substracts $\mathtt{0x61c88647}$ (since $\mathtt{0x61c88647} =  \lnot\mathtt{0x9e3779b9}+1$), thus if you try to look up a constant and get no results, try searching for the inverse of that constant (plus one) as well.
+The first and easiest way to identify some cryptographic functions is to utilize the fact that many of these algorithms make use of specific constants in their calculations. Identifying and looking up these constants can help you quickly identify some algorithms. For example the MD5 hashing algorithm initializes a state with the following four 32bit values: $\mathtt{0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476}$. Be careful though since SHA1 also uses these four values but additionally it uses $\mathtt{0xc3d2e1f0}$ in its initialization. Another thing to look out for is some optimizations. Several algorithms, including the XTEA block cipher, add a constant ($\mathtt{0x9e3779b9}$ in the XTEA case) in each iteration. Since numbers are represented with two's complement, it means that adding a value $X$ is the same as subtracting $\lnot X+1$, that is the bitwise negation of $X$, plus one. This means that, in the case of XTEA, you sometimes will instead see that the code subtracts $\mathtt{0x61c88647}$ (since $\mathtt{0x61c88647} =  \lnot\mathtt{0x9e3779b9}+1$), thus if you try to look up a constant and get no results, try searching for the inverse of that constant (plus one) as well.
 \vspace*{-0.7\baselineskip}
 
 \begin{minted}{asm}
@@ -57,14 +57,14 @@ sub edx, 0x61c88647
 \end{minted}
 
 \vspace*{-0.7\baselineskip}
-Popular algortihms that make use of specific constants include: MD5, SHA1, SHA2, TEA and XTEA
+Popular algorithms that make use of specific constants include: MD5, SHA1, SHA2, TEA and XTEA.
 \vspace*{-1.2\baselineskip}
 
 
 \subsection*{Tables}
 \vspace*{-0.4\baselineskip}
 
-Closely related to algorithms that use specific constants are algorithms that use look-up tables for computations. While the individual values in these tables usually are not that special as they are typically indices or permutations of a sequence, the sequence it self is often unique to that specific algorithm. For example, the substitution box, S-box, for AES encryption looks like this:
+Closely related to algorithms that use specific constants are algorithms that use look-up tables for computations. While the individual values in these tables usually are not that special as they are typically indices or permutations of a sequence, the sequence itself is often unique to that specific algorithm. For example, the substitution box, S-box, for AES encryption looks like this:
 
 \begin{table}[!h]
 \setlength{\tabcolsep}{3pt}
@@ -80,12 +80,12 @@ Closely related to algorithms that use specific constants are algorithms that us
     %\caption{AES S-box} \label{tab:sbox}
 \end{table}
 
-Searching for a subset of this table, such as "63 7c 77 7b f2 6b", will reveal that this is the Rijndael (the name of the AES algorithm) S-box. Popular algortihms that make use of look-up tables include: AES, DES and Blowfish.
+Searching for a subset of this table, such as "63 7c 77 7b f2 6b", will reveal that this is the Rijndael (the name of the AES algorithm) S-box. Popular algorithms that make use of look-up tables include: AES, DES and Blowfish.
 
 
 \subsection*{RC4}
 
-Although not recommended anymore due to cryptographical weaknesses, the RC4 chiper still shows up in a lot of places, possibly due to its simplicity. The full key scheduling and stream cipher implemented in Python are shown below. The pattern to look out for here is the two loops in the key scheduling algorithm where the first one creates a sequence of the numbers $[0,255]$ and the second one swaps them around based on the key.
+Although not recommended anymore due to cryptographical weaknesses, the RC4 cipher still shows up in a lot of places, possibly due to its simplicity. The full key scheduling and stream cipher implemented in Python are shown below. The pattern to look out for here is the two loops in the key scheduling algorithm where the first one creates a sequence of the numbers $[0,255]$ and the second one swaps them around based on the key.
 \vspace*{-0.3\baselineskip}
 
 \begin{minted}{python}
@@ -146,7 +146,7 @@ A popular pattern to look out for in cryptographic code is a Feistel Network. Th
 
 \subsection*{Be careful}
 
-Finally, look out for slightly modified algorithms. Techniques described above gives you good heuristics for identifying crypto algorithms. However, sometimes authors make small adjustments to them to waste your time. You might incorrectly identify a piece of code as, for example, SHA1 and just use a SHA1 library function in a unpacker script you are writing separately when in reality a slight adjustment has been made to the algorithm to make it produce completely different outputs. This of course destroys any security guarantees of the algorithm but in some scenarios that is of less importance. This means that if you use these techniques and experience issues, verify the functions by comparing the input and output with an off-the-shelf version of the algorithm you believe to have identified.
+Finally, look out for slightly modified algorithms. Techniques described above gives you good heuristics for identifying crypto algorithms. However, sometimes authors make small adjustments to them to waste your time. You might incorrectly identify a piece of code as, for example, SHA1 and just use a SHA1 library function in an unpacker script you are writing separately when in reality a slight adjustment has been made to the algorithm to make it produce completely different outputs. This of course destroys any security guarantees of the algorithm but in some scenarios that is of less importance. This means that if you use these techniques and experience issues, verify the functions by comparing the input and output with an off-the-shelf version of the algorithm you believe to have identified.
 
 %\vfill\null
 
