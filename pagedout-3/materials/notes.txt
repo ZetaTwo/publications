@@ -1,0 +1,68 @@
+Obfuscation:
+resource exhaustion
+budget: time, money, interest
+
+python bytecode
+variable names
+
+decompiler
+uncompyle6
+
+~assumes bytecode was generated from Python code
+abuse control flow with try-except
+
+restore variable names
+
+legal variable names
+python code vs byte code
+
+previous examples:
+whitespace
+
+types of obfuscation
+hide
+mislead
+
+new example:
+m != d(c(m))
+
+PoC 1:
+x = 1
+EVIL = 2
+
+s/EVIL/x /
+
+x = 1
+x  = 2
+
+PoC 2:
+x = 1
+EVIL = 3
+
+s/EVIL/x = 2\nx/
+
+x = 1
+x = 2
+x = 3
+
+PoC 3:
+for x in range(10):
+    ...
+EVIL = 0
+while x < 20:
+   ...
+
+s/EVIL/x = 0\ny/
+
+for x in range(10):
+    ...
+x = 0
+y = 0
+while x < 20:
+   ...
+
+
+
+how to avoid:
+check symbol names
+ast.parse_name ???

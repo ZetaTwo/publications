@@ -1,0 +1,121 @@
+\documentclass[twocolumn]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{blindtext}
+\usepackage[paperheight=252mm,paperwidth=174mm,margin=1mm,heightrounded]{geometry}
+\usepackage{ulem}
+\usepackage{array}
+\usepackage{listings}
+
+\usepackage{minted}
+%\BeforeBeginEnvironment{minted}{}
+%\AfterEndEnvironment{minted}{}
+
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows}
+\usetikzlibrary{positioning}
+
+%% Common TikZ libraries
+\usetikzlibrary{calc}
+
+%% Custom TikZ addons
+\usetikzlibrary{crypto.symbols}
+\tikzset{shadows=no}        % Option: add shadows to XOR, ADD, etc.
+
+\usepackage{color}
+\definecolor{light-gray}{rgb}{0.95,0.95,0.95}
+\setminted{bgcolor=light-gray}  % this line causes the problem
+
+\setlength{\parindent}{0mm}
+\setlength{\parskip}{0mm}
+
+\tikzstyle{string} = [rectangle, rounded corners, inner sep=2mm, text centered, draw=black, fill=red!30]
+\tikzstyle{bytes} = [rectangle, rounded corners, inner sep=2mm, text width=, text centered, draw=black, fill=blue!30]
+\tikzstyle{int} = [rectangle, rounded corners, inner sep=2mm, text width=,  text centered, draw=black, fill=green!30]
+\tikzstyle{arrow} = [thick,->,>=stealth]
+
+\begin{document}
+
+\title{Python Bytecode Anti-decompilation}
+\date{}
+%\maketitle
+\section*{Deceptive Python decompilation}
+
+\vspace*{-1\baselineskip}
+
+Software obfuscation is the science and art of modifying programs to hide some aspect of it, for example what the program does or how it acomplishes a certain task. There are many ways of doing this and new creative ideas regularly pop up. The methods all have their own goals and trade-offs. In the end, the goal is to slow down reverse engineering of the program to exhaust the analyst's "budget" whether that is time, money or interest. Some obfuscation techniques are better at thwarting automated analysis, for example by exploiting assumptions and limitation in tools or detecting sandboxes and altering their behaviour, while others are more aimed at making life a pain for a human reverse engineer. The latter type can be achieved for example by adding a lot of useless stuff to the program or writing code that subverts expectations by seemingly doing one thing while actually doing something else\footnote{See the \textit{Underhanded C Contest} for great examples}
+
+\vspace*{-1.3\baselineskip}
+
+\subsection*{Python bytecode}
+
+The technique we will discuss here is a way of obfuscating Python bytecode. Before Python code is executed\footnote{In the CPython implementation}, it is parsed and transformed into Python bytecode. Usually programs are shipped as Python code which can be run but it is possible to only use the .pyc files containing the compiled bytecode. This is for example what py2exe does when building a stand-alone executable from Python code. The bytecode is then executed in the stack-based VM inside CPython.
+
+\vspace*{-1.3\baselineskip}
+
+\subsection*{Bytecode decompilation tricks}
+
+
+When trying to analyze Python bytecode it is desirable to turn it back into regular Python code for readability. There are multiple tools for doing this but the most popular is uncompyle6 which usually works amazingly well for decompiling Python bytecode. There exist multiple ways to fool it however. One way to mess up the decompilation is to craft Python bytecode that can't be produced from valid Python code, such as abusing exceptions for flow control. This is powerful because the decompilation will fail with no chance of recovery since the original code isn't actually Python to start with. The downside is that you need to either write the bytecode by hand or create your own compiler.
+
+Another way is to abuse variable names to mess up the decompilation. The Python bytecode retains all the variable names to enable correct execution and interaction with other scripts. In contrast to the Python language, the CPython VM itself has no restrictions variable naming. This can be absued be replacing all variable names with whitespace. This will transform code like this:
+
+\begin{minted}{python}
+S, j = range(256), 0
+for i in range(256):
+    j = (j + S[i] + key[i % keylength]) % 256
+    S[i], S[j] = S[j], S[i]  # swap
+\end{minted}
+
+into bytecode which decompiles to this:
+
+\begin{minted}{python}
+ ,    = range(256), 0
+for     in range(256):
+      = (   +     [   ] +      [    %      ]) % 256
+        [   ],     [  ] =     [  ],     [   ]
+\end{minted}
+
+The resulting code isn't even valid Python code. The downside with this technique is that it is very obvious that something went wrong and a slight adjustment to the decompilation process completely neutralizes it. 
+
+Inspired by this method, we can do something slightly more subtle. Consider the following code which almost implements RC4:
+
+\begin{minted}{python}
+def rc4(data, key):
+  ...
+  for i in range(256):
+    ...
+  OBFUSCATION = 0
+  for b in data:
+    i = (i + 1) % 256
+    j = (j + S[i]) % 256
+    ...
+  ...
+\end{minted}
+
+By replacing the name of the variable "OBFUSCATION" with "i = 0\textbackslash n  j", the code will decompile into this.
+
+\begin{minted}{python}
+def rc4(data, key):
+  ...
+  for i in range(256):
+    ...
+  i = 0
+  j = 0
+  for b in data:
+    i = (i + 1) % 256
+    j = (j + S[i]) % 256
+    ...
+  ...
+\end{minted}
+
+The decompiled code now implements RC4 correctly and would typically not warrant and further scrutiny since it's just an implementation of a well known algorithm. This is the key element because the decompiled code now is functionally different to the original code and its corresponding bytecode. In the initial version, the value of the variable $i$ will be $255$ when it enters the second loop but in the decompiled version it will be $0$. If this function is used as part of an unpacker it will mean that even though the reverse engineer uses the correct key, the payload will never be succesfully decrypted. This could easily throw many reverse engineers off and make them waste a lot of time.
+
+The key idea here is that the resulting decompilation is completely incorrect while at the same time looking completely correct and matching the expectations of the reverse engineer.
+
+
+%\vfill\null
+
+
+
+
+\end{document}
