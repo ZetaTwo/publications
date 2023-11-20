@@ -42,7 +42,7 @@
 
 \vspace*{-0.5\baselineskip}
 
-Software obfuscation is the science and art of modifying programs to hide certain aspects of it, for example what the program does or how it accomplishes a certain task. The goal is to slow down reverse engineering of the program to exhaust the analyst's ``budget'' whether that is time, money or interest. Some obfuscation techniques are better at thwarting automated analysis, for example by exploiting assumptions and limitations in analysis tools, while others are more aimed at making life a pain for a human reverse engineer. The latter type can be achieved for example by adding a lot of useless stuff to the program or writing code that seemingly does one thing while it actually does something else\footnote{See the \textit{Underhanded C Contest} for great examples}.
+Software obfuscation is the science and art of modifying a program to hide certain aspects of it, for example what the program does or how it accomplishes a certain task. The goal is to slow down reverse engineering of the program to exhaust the analyst's ``budget'' whether that is time, money or interest. Some obfuscation techniques are better at thwarting automated analysis, for example by exploiting assumptions and limitations in analysis tools, while others are more aimed at making life a pain for a human reverse engineer. The latter type can be achieved for example by adding a lot of useless stuff to the program or writing code that seemingly does one thing while it actually does something else\footnote{See the \textit{Underhanded C Contest} for great examples}.
 
 \vspace*{-1\baselineskip}
 
@@ -59,9 +59,9 @@ The technique we will discuss here is a way of obfuscating Python bytecode. Befo
 \vspace*{-0.3\baselineskip}
 
 
-When trying to analyze Python bytecode it is desirable to turn it back into regular Python code for readability. A popular tool to do this is uncompyle6 which usually works amazingly well for decompiling Python bytecode. There exist multiple ways to fool it however. One way to mess up the decompilation is to craft Python bytecode that can't be produced from valid Python code, such as abusing exceptions for flow control. This is powerful because the decompilation will likely fail since the original code isn't actually Python to start with. The downside is that you need to either write the bytecode by hand or create your own compiler.
+When trying to analyze Python bytecode, it is desirable to turn it back into regular Python code for readability. A popular tool to do this is uncompyle6 which usually works amazingly well for decompiling Python bytecode. There exist multiple ways to fool it however. One way to mess up the decompilation is to craft Python bytecode that can't be produced from valid Python code, such as abusing exceptions for flow control. This is powerful because the decompilation will likely fail since the original code isn't actually Python to start with. The downside is that you need to either write the bytecode by hand or create your own compiler.
 
-Another way is to abuse variable names. The Python bytecode retains all the variable names to enable reflection. In contrast to the Python language, the CPython VM itself has no restrictions on variable naming. This can be abused by replacing all variable names with whitespace. It till transform code from:
+Another way is to abuse variable names. Python bytecode retains all the variable names to enable reflection. In contrast to the Python language, the CPython VM itself has no restrictions on variable naming. This can be abused by replacing all variable names with whitespace. It will transform code from:
 
 \begin{minted}{python}
 S, j = range(256), 0
@@ -70,7 +70,7 @@ for i in range(256):
     S[i], S[j] = S[j], S[i]  # swap
 \end{minted}
 
-into bytecode which decompiles to something like this:
+into bytecode which decompiles into something like this:
 
 \begin{minted}{python}
  ,    = range(256), 0
@@ -112,7 +112,7 @@ def rc4(data, key):
   ...
 \end{minted}
 
-The decompiled code now implements RC4 correctly and would typically not warrant any further scrutiny since it's just an implementation of a well known algorithm. This is the key element because the decompiled code is now functionally different to the original code and its corresponding bytecode. In the initial version, the value of the variable $i$ will be $255$ when it enters the second loop but in the decompiled version it will be $0$. If this function is used as part of an unpacker it will mean that even though the reverse engineer uses the correct key, the payload will never be succesfully decrypted. This could easily throw many reverse engineers off and make them waste a lot of time.
+The decompiled code now implements RC4 correctly and would typically not warrant any further scrutiny since it's just an implementation of a well-known algorithm. This is the key element because the decompiled code is now functionally different to the original code and its corresponding bytecode. In the initial version, the value of the variable $i$ will be $255$ when it enters the second loop but in the decompiled version it will be $0$. If this function is used as part of an unpacker, it will mean that even though the reverse engineer uses the correct key, the payload will never be succesfully decrypted. This could easily throw many reverse engineers off and make them waste a lot of time.
 
 The key idea of this method is to create a program that decompiles to seemingly correct code to not raise suspicion and thereby throwing the analyst off while hiding the true functionality of the code.
 
