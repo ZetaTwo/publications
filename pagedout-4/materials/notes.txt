@@ -1,0 +1,3 @@
+GDB headless scripting techniques
+
+copy from exploit workshop unit tests
