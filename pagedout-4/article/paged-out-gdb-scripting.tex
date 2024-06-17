@@ -42,16 +42,16 @@
 
 \vspace*{-0.5\baselineskip}
 
-Consider a simple exploitation scenario where we have a stack buffer overflow and we want to figure out at what offset of our input the value that will overwrite the return address resides. We could use our decompiler platform of choice, cross-reference the local variable usage, let it reconstruct the stack frame and compare the offset of the overflowing variable with the offset of the saved return address.
+Consider a simple exploitation scenario where we have a stack buffer overflow and we want to figure out the location in our input that contains the value that will overwrite the return address. We could use our decompiler platform of choice, cross-reference the local variable usage, let it reconstruct the stack frame and compare the offset of the overflowing variable with the offset of the saved return address.
 
-On the other hand, sending a de Bruijn sequence generated with the pwntools cyclic() function, using the instruction pointer value at the crash and calculating the offset might be easier.
+On the other hand, sending a de Bruijn sequence generated with the pwntools cyclic() function, using the instruction pointer value at the crash and calculating the offset, might be easier.
 
-Doing this manually is all well and good and can be accomplished in a few minutes but what if you want to do this in an automated or "headless" fashion? While we do not yet live in a utopia with an API-first headless scriptable debugger\footnote{Someone please build this} we can make a workable hack.
+Doing this manually is all well and good and can be accomplished in a few minutes but what if you want to do this in an automated or "headless" fashion? While we do not yet live in a utopia with an API-first headless scriptable debugger,\footnote{Someone please build this} we can make a workable hack.
 
 \vspace*{-0.5\baselineskip}
 \subsection*{Scripting GDB}
 
-As long as we are on a platform supported by GDB we can accomplish this by using its Python API. The first step is to start the process and attach GDB
+As long as we are on a platform supported by GDB, we can accomplish this by using its Python API. The first step is to start the process and attach GDB
 
 \begin{minted}{python}
 from pwn import *
@@ -68,7 +68,7 @@ def stop_handler(event):
 gdb_api.events.stop.connect(stop_handler)
 \end{minted}
 
-If we then make the program crash we can access register values from this handler
+If we then make the program crash, we can access register values from this handler
 
 \begin{minted}{python}
 ...
@@ -84,7 +84,7 @@ def stop_handler(event):
 \vspace*{-0.5\baselineskip}
 \subsection*{Linearizing the flow}
 
-Now, since this is event-driven we might want to add some plumbing to make the rest of the code wait for the result to come back. We do this by using the fact that any callable can be passed as an event handler together with a semaphore.
+Now, since this is event-driven, we might want to add some plumbing to make the rest of the code wait for the result to come back. We do this by using the fact that any callable can be passed as an event handler together with a semaphore.
 
 \begin{minted}{python}
 class GdbExtractor:
@@ -105,7 +105,7 @@ extractor.semaphore.acquire()
 print(f'Ret: {extractor.retaddr}')
 \end{minted}
 
-For this to work fully headless you might need to adjust the terminal. If you are using pwntools, you can do this like this:
+For this to work fully headless, you might need to adjust the terminal. If you are using pwntools, you can do this like this:
 
 \begin{minted}{python}
 context.terminal = [
@@ -122,7 +122,7 @@ context.terminal = None
 \vspace*{-0.5\baselineskip}
 \subsection*{Nested events gotchas}
 
-If you want to issue commands to GDB, you can do this with the .execute() method but there is a small caveat if you are doing this from within an event handler. If you call "continue" from the event handler it will not work, however we can again take advantage of the fact that you can pass a callable
+If you want to issue commands to GDB, you can do this with the .execute() method but there is a small caveat if you are doing this from within an event handler. If you call "continue" from the event handler, it will not work. However, we can again take advantage of the fact that you can pass a callable
 
 \begin{minted}{python}
 # inside an event handler
@@ -136,7 +136,7 @@ def stop_handler(event):
 gdb.execute('continue')
 \end{minted}
 
-Now, why would we want this? Personally, the problem arose when I was building "unit tests" to a series of introductory CTF challenges I had built. I wanted my solve scripts to be able to solve the challenges even if they were rebuilt in such a way that the stack layout happened to change or even work for multiple architectures. One could also imagine this being useful for unit or integration tests in a exploit development shop.
+Now, why would we want this? Personally, the problem arose when I was building "unit tests" to a series of introductory CTF challenges I had built. I wanted my solve scripts to be able to solve the challenges even if they were rebuilt in such a way that the stack layout happened to change or even work for multiple architectures. One could also imagine this being useful for unit or integration tests in an exploit development shop.
 
 %\vfill\null
 \end{document}
