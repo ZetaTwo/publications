@@ -1,0 +1,8 @@
+*.bin
+*.o
+
+base
+patched
+patched.strip
+
+init_redirect.asm

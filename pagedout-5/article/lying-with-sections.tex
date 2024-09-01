@@ -1,0 +1,148 @@
+\documentclass[twocolumn]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{blindtext}
+\usepackage[paperheight=252mm,paperwidth=174mm,margin=1mm,heightrounded]{geometry}
+\usepackage{ulem}
+\usepackage{array}
+\usepackage{listings}
+\usepackage{csquotes}
+
+\usepackage{minted}
+%\BeforeBeginEnvironment{minted}{}
+%\AfterEndEnvironment{minted}{}
+
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows}
+\usetikzlibrary{positioning}
+
+%% Common TikZ libraries
+\usetikzlibrary{calc}
+
+%% Custom TikZ addons
+\usetikzlibrary{crypto.symbols}
+\tikzset{shadows=no}        % Option: add shadows to XOR, ADD, etc.
+
+\usepackage{color}
+\definecolor{light-gray}{rgb}{0.95,0.95,0.95}
+\setminted{bgcolor=light-gray}  % this line causes the problem
+
+\setlength{\parindent}{0mm}
+\setlength{\parskip}{0mm}
+
+\tikzstyle{string} = [rectangle, rounded corners, inner sep=2mm, text centered, draw=black, fill=red!30]
+\tikzstyle{bytes} = [rectangle, rounded corners, inner sep=2mm, text width=, text centered, draw=black, fill=blue!30]
+\tikzstyle{int} = [rectangle, rounded corners, inner sep=2mm, text width=,  text centered, draw=black, fill=green!30]
+\tikzstyle{arrow} = [thick,->,>=stealth]
+
+\begin{document}
+
+\title{Lying with ELF Sections}
+\date{}
+%\maketitle
+
+\section*{Lying with ELF Sections}
+\vspace*{-0.5\baselineskip}
+
+A big thanks to bluec0re without whom, this project would not have been possible. 
+
+Create the following C-code:
+
+\begin{minted}{c}
+#include <stdio.h>
+__attribute__((section (".s1")))
+int function2(void) {
+    puts("Function 2");
+}
+__attribute__((section (".s2")))
+int function1(void) {
+    puts("Function 1");
+}
+int main() {
+    function1();
+}
+\end{minted}
+
+And compile it like this:
+
+\begin{minted}{bash}
+gcc -o example1.pre example1.c 
+S1=$(objdump -j .s1 -h target | \
+    awk '/.s1/ { print "0x" x $4 }')
+objcopy --change-section-vma .s2=$S1 \
+    example1.pre example1
+\end{minted}
+
+Running this program prints "Function 1". However, if you open this in IDA Pro\footnote{IDA version 8.4.240527}, it will show the following:
+
+\begin{minted}{c}
+int main() {
+    function2();
+}
+\end{minted}
+
+Clicking the function call still shows the correct function so this isn't a big deal but it tells us something about how IDA is operating. Both Binary Ninja\footnote{Binary Ninja version 4.2.6016-dev} and Ghidra\footnote{Ghidra version 11.1.2} get it right.
+
+\vspace*{-0.5\baselineskip}
+\subsection*{Abusing .init}
+
+The above example suggests that some tools might over-rely on sections to inform them. However, the disassembly and decompilation of the code remains correct. Can we still use this do something tricky? Apart from things like code and data, ELF binaries have various other sections of interest. The ".init" section contains code that is executed before main by the "\_\_libc\_start\_main" function. Let's get tricky. Create the following C-code:
+
+\begin{minted}{c}
+#include <stdio.h>
+int main() {
+    puts("Hello World!");
+    return 0;
+}
+void backdoor() {
+    puts("Backdoor!");
+}
+\end{minted}
+
+And compile it like this:
+
+\begin{minted}{bash}
+# Omit .eh_frame to fool Ghidra
+gcc -fno-asynchronous-unwind-tables \
+    -o ex2.pre example2.c
+# Store the orginal .init to use as decoy
+objcopy --dump-section .init=i1.bin ex2.pre
+# Create backdoor trampoline
+ADDR1=$(nm ${SRC} | grep '\bbackdoor\b' | \ 
+    awk '{print "0x" x $1}')
+ADDR2=$(objdump -j .init -h "${SRC}" | \
+    awk '/\.init/ { print "0x" x $4 }')
+JUMP=$(printf "%#x" $(($ADDR1-$ADDR2)))
+cat > init_redirect.asm <<EOF
+BITS 64
+call \$+$JUMP
+ret
+EOF
+nasm -fbin -oi2.bin init_redirect.asm
+# Insert the trampoline and decoy
+objcopy --update-section .init=i2.bin \
+    --rename-section .init=.xinit \
+    --add-section=.init=i1.bin \
+    --set-section-flags .init=alloc,code \
+    --change-section-vma .init=$INIT_VMA \
+    ex2.pre example2
+strip -s example2 -o example2.strip
+\end{minted}
+
+Running example2 outputs "Backdoor!" and "Hello World!". Opening this in IDA Pro shows a normal looking "\_init\_proc" function and even if we manually check the backdoor function no cross-references to it are found. With some code changes, we might even be able to prevent the IDA sweeper from finding the function at all.
+This now also fools Ghidra which shows you a completely normal "\_DT\_INIT". In fact Ghidra does not even identify the backdoor function as code at all. Depending on how interpret it, even objdump output can be misleading here since it shows disassembly of both the original ".init" and the detour at the same virtual address. Binary Ninja still shows correct output.
+
+\vspace*{-0.5\baselineskip}
+\subsection*{Analysis}
+
+Why does this work? We just said that the ".init" section is special. If we rename it to something else then it should no longer be executed. It turns out that this is an outdated description of the situation. Reading the glibc source code reveals this comment:
+
+\begin{displayquote}
+   Note: The init and fini parameters are no longer used ...
+   For dynamically linked executables, the dynamic segment is used to
+   locate constructors and destructors ...
+\end{displayquote}
+
+Indeed, in the segment containing the ".dynamic" section, we find a table where one of the entries is the pair (DT\_INIT,0x1000) and this is the virtual address of the init function. This is what the decompilers should use to determine where the init function is, not section names.
+
+%\vfill\null
+\end{document}
