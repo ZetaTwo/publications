@@ -44,7 +44,7 @@
 \section*{Lying with ELF Sections}
 \vspace*{-0.5\baselineskip}
 
-A big thanks to bluec0re without whom, this project would not have been possible. 
+A big thanks to bluec0re without whom this project would not have been possible. 
 
 Create the following C-code:
 
@@ -81,12 +81,12 @@ int main() {
 }
 \end{minted}
 
-Clicking the function call still shows the correct function so this isn't a big deal but it tells us something about how IDA is operating. Both Binary Ninja\footnote{Binary Ninja version 4.2.6016-dev} and Ghidra\footnote{Ghidra version 11.1.2} get it right.
+Clicking the function call still shows the correct function, so this isn't a big deal, but it tells us something about how IDA is operating. Both Binary Ninja\footnote{Binary Ninja version 4.2.6016-dev} and Ghidra\footnote{Ghidra version 11.1.2} get it right.
 
 \vspace*{-0.5\baselineskip}
 \subsection*{Abusing .init}
 
-The above example suggests that some tools might over-rely on sections to inform them. However, the disassembly and decompilation of the code remains correct. Can we still use this do something tricky? Apart from things like code and data, ELF binaries have various other sections of interest. The ``.init'' section contains code that is executed before main by the ``\_\_libc\_start\_main'' function. Let's get tricky. Create the following C-code:
+The above example suggests that some tools might over-rely on sections to inform them. However, the disassembly and decompilation of the code remains correct. Can we still use this to do something tricky? Apart from things like code and data, ELF binaries have various other sections of interest. The ``.init'' section contains code that is executed before main by the ``\_\_libc\_start\_main'' function. Let's get tricky. Create the following C-code:
 
 \begin{minted}{c}
 #include <stdio.h>
@@ -130,12 +130,12 @@ strip -s example2 -o example2.strip
 \end{minted}
 
 Running example2 outputs ``Backdoor!'' and ``Hello World!''. Opening this in IDA Pro shows a normal looking ``\_init\_proc'' function and even if we manually check the backdoor function no cross-references to it are found. With some code changes, we might even be able to prevent the IDA sweeper from finding the function at all.
-This now also fools Ghidra which shows you a completely normal ``\_DT\_INIT''. In fact Ghidra does not even identify the backdoor function as code at all. Depending on how interpret it, even objdump output can be misleading here since it shows disassembly of both the original ``.init'' and the detour at the same virtual address. Binary Ninja still shows correct output.
+This now also fools Ghidra which shows you a completely normal ``\_DT\_INIT''. In fact, Ghidra does not even identify the backdoor function as code at all. Depending on how you interpret it, even objdump output can be misleading here since it shows disassembly of both the original ``.init'' and the detour at the same virtual address. Binary Ninja still shows correct output.
 
 \vspace*{-0.5\baselineskip}
 \subsection*{Analysis}
 
-Why does this work? We just said that the ``.init'' section is special. If we rename it to something else then it should no longer be executed. It turns out that this is an outdated description of the situation. Reading the glibc source code reveals this comment:
+Why does this work? We just said that the ``.init'' section is special. If we rename it to something else, then it should no longer be executed. It turns out that this is an outdated description of the situation. Reading the glibc source code reveals this comment:
 
 \begin{displayquote}
    Note: The init and fini parameters are no longer used ...
