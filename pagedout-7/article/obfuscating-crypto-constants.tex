@@ -1,0 +1,142 @@
+\documentclass[twocolumn]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{blindtext}
+\usepackage[paperheight=252mm,paperwidth=174mm,margin=1mm,heightrounded]{geometry}
+\usepackage{ulem}
+\usepackage{array}
+\usepackage{listings}
+\usepackage{fvextra}
+\usepackage{amsmath}
+\usepackage{csquotes}
+
+\usepackage{minted}
+%\BeforeBeginEnvironment{minted}{}
+%\AfterEndEnvironment{minted}{}
+
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows}
+\usetikzlibrary{positioning}
+
+%% Common TikZ libraries
+\usetikzlibrary{calc}
+
+%% Custom TikZ addons
+\usetikzlibrary{crypto.symbols}
+\tikzset{shadows=no}        % Option: add shadows to XOR, ADD, etc.
+
+\usepackage{color}
+\definecolor{light-gray}{rgb}{0.95,0.95,0.95}
+\setminted{bgcolor=light-gray}  % this line causes the problem
+
+\setlength{\parindent}{0mm}
+\setlength{\parskip}{0mm}
+
+\tikzstyle{string} = [rectangle, rounded corners, inner sep=2mm, text centered, draw=black, fill=red!30]
+\tikzstyle{bytes} = [rectangle, rounded corners, inner sep=2mm, text width=, text centered, draw=black, fill=blue!30]
+\tikzstyle{int} = [rectangle, rounded corners, inner sep=2mm, text width=,  text centered, draw=black, fill=green!30]
+\tikzstyle{arrow} = [thick,->,>=stealth]
+
+\begin{document}
+
+\title{Obfuscating Crypto Constants}
+\date{}
+%\maketitle
+
+\section*{Obfuscating Crypto\footnote{Crypto \emph{still} stands for cryptography} Constants}
+\vspace*{-0.5\baselineskip}
+
+The following function initializes two arrays of values. Do you know what these arrays are used for?
+
+\begin{minted}{c}
+#include <stdint.h>
+#include <stddef.h>
+
+#define N 11
+#define P 312
+#define H 8
+#define K 64
+#define M (1LL<<32)
+
+void init(uint32_t *h, uint32_t *k) {
+  size_t pi = 0;
+  uint8_t ip[P-2];
+  for (size_t p = 0; p < (P-2); p++) {
+    ip[p] = 1;
+  }
+  for (size_t p = 0; p < (P-2); p++) {
+    if (ip[p] == 0) {
+      continue;
+    }
+    if (pi < H) {
+      double x = p + 2;
+      double xn = x / 2;
+      for (size_t i = 0; i < N; i++) {
+        xn = 1.0/2*xn+x/(2*xn);
+      }
+      h[pi] = (uint32_t)(uint64_t)(xn*M);
+    }
+    if (pi < K) {
+      double x = p + 2;
+      double xn = x / 3;
+      for (size_t i = 0; i < N; i++) {
+        xn = 2.0/3*xn+x/(3*xn*xn);
+      }
+      k[pi] = (uint32_t)(uint64_t)(xn*M);
+    }
+    pi++;
+    for (size_t n = p+2; n < (P-2); n++) {
+      size_t val = (p + 2) * n - 2;
+      if (val + 1 > (P-2)) {
+        break;
+      }
+      ip[val] = 0;
+    }
+  }
+}
+
+static uint32_t h[H], k[K];
+int main() {
+    init(h, k);
+
+    // h & k used as part of an algorithm
+    // ...
+}
+\end{minted}
+
+One of the techniques I presented in my article in Issue \#2 of PagedOut on identifying cryptographic algorithms was to use constants in the algorithm to fingerprint them. We can try to thwart such attempts by obfuscating the constants. It is possible to employ generic obfuscation techniques, e.g. encryption or virtualization, but another fun way to do it is to dynamically generate the constants based on their underlying definition.
+
+\vspace*{-0.5\baselineskip}
+\subsection*{Explanation of the code}
+
+In the SHA2 family of hashes, two sets of constants are used: the initial state H and the round constants K. Each entry in these lists of constants is defined as the first 32 bits of the fractional part of the square and cube roots, respectively, of the first prime numbers. For example $K[3] = \lfloor 2^{32}*\sqrt[3]{7} \rfloor = e9b5dba5_{16} $.
+
+In the example to the left, we calculate the SHA256 constants dynamically instead of hard-coding those numbers. First, we know that we need the first 64 prime numbers, the last one being 311 so we run the Sieve of Eratosthenes for the first 311 numbers. Then for each prime number, we calculate the square and cube roots as needed using 11 iterations of Newton-Raphson.
+
+$$
+\sqrt{x} = \begin{cases}
+x_0 = x/2\\
+x_{n+1} = \frac{1}{2}\left(x_n + \frac{x}{x_n}\right)\\
+\end{cases}
+$$
+
+$$
+\sqrt[3]{x} = \begin{cases}
+x_0 = x/3\\
+x_{n+1} = \frac{1}{3}\left(2x_n + \frac{x}{x_n^2}\right)
+\end{cases}
+$$
+
+In this variant, the values are calculated once and are later reused when needed. For an additional performance cost, it is possible to instead re-calculate these values every time they are needed, thus making them sit around in memory for only very short periods of time, which might make not only static but even some dynamic analysis more challenging.
+
+\vspace*{-0.5\baselineskip}
+\subsection*{Other Algorithms}
+
+This was just one example, but the technique can be applied to several cryptographic algorithms. MD5 uses $ \lfloor2^{32}|\sin(x)|\rfloor $ of the first 64 integers, and SHA1 uses $ 2^{30}\sqrt{x} $ for the numbers 2, 3, 5 and 10. For initialization, they both use numbers based on runs of digits in hexadecimal, such as 0x67452301 and 0xEFCDAB89. The S-box used in AES, while based on some nontrivial mathematics, can be calculated with a simple loop. 
+
+\vspace*{-0.5\baselineskip}
+\subsection*{Summary}
+
+Using the underlying mathematical definitions to dynamically compute constants for cryptographic algorithms removes them as statically identifiable artifacts from the code. This provides a low-overhead and easy-to-implement tool in the toolbox to misdirect reverse engineers, making it more difficult for them to find the cryptographic algorithms which often are used in interesting parts of the code.
+
+%\vfill\null
+\end{document}
