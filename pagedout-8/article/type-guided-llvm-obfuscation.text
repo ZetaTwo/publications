@@ -45,21 +45,17 @@
 \section*{Type-Guided LLVM Obfuscation}
 \vspace*{-0.5\baselineskip}
 
-The pass system in LLVM is a popular choice for implementing obfuscation. Techniques such as control-flow flattening and mixed boolean arithmetic are easily performed via transformation passes.
-
-One drawback with this is that since we are operating at the LLVM IR level, a lot of information in the code, such as non primitive types, has already been erased at this stage. Types are powerful because they can encode invariants that can inform our obfuscation.
+LLVM passes are popular for implementing obfuscations. Techniques such as control-flow flattening and mixed boolean arithmetic (MBA) are easily performed via transformation passes. A drawback with this is that since we are operating at the LLVM IR level, a lot of information, such as most  types, have already been erased at this stage. Types are powerful because they can encode invariants that can inform our obfuscation.
 
 \vspace*{-0.5\baselineskip}
 \subsection*{Invariant-based MBA}
 
-As a simple example, consider a custom integer type that supports all the usual operations but internally stores the value $x$ as $2x$. If we have a function that takes an argument $x$ of this type, we could in principle replace every use of (the internal value of) this argument with $x + (x \& 1)$. For performance and simplicity reasons, most decompilers and deobfuscation tools will perform their analysis over all possible values and thus they are unable to simplify the expression back to $x$ since it can easily find a counter-example $1 + (1 \& 1) \neq 1$. This "conditional MBA" uses non-local information to strengthen the obfuscation.
-
-While we can perform a decent amount of source-level obfuscation where we do have access to the type information, it would be even better if we could get the best of two worlds: rich information about invariants from the source-level with the fine-grained control at the LLVM IR level.
+As a simple example, consider a custom integer type that supports all the usual operations but internally stores the value $x$ as $2x$. If we have a function that takes an argument $x$ of this type, we could in principle replace every use of (the internal value of) this argument with $x + (x \& 1)$. For performance and simplicity reasons, most decompilers and deobfuscation tools will perform their analysis over all possible values and thus they are unable to simplify the expression back to $x$ since it can easily find a counter-example $1 + (1 \& 1) \neq 1$. This "conditional MBA" uses non-local information to strengthen the obfuscation. While we can perform a decent amount of source-level obfuscation where we do have access to the type information, it would be even better if we could get the best of two worlds: rich information about invariants from the source-level with the fine-grained control at the LLVM IR level.
 
 \vspace*{-0.5\baselineskip}
 \subsection*{Clang annotations}
 
-Luckily, at least for C and C++ code, we can use clang annotations to transfer information to the IR level. In C++, any constant expression can be used.
+Luckily, at least for C and C++ code, we can use clang annotations to transfer information to the IR level. In C++, any constant expression can be used. For example, we can annotate a function parameter as follows:
 
 \begin{minted}{c++}
 int f([[clang::annotate("obf", 42)]] int a) {
@@ -81,9 +77,9 @@ call void @llvm.var.annotation.p0.p0(ptr %2,
 ptr @.str, ptr @.str.1, i32 2, ptr @.args)
 \end{minted}
 
-Any sequence of constant values can be used. However, this annotation is fragile since it will quickly get optimized away in the LLVM pipeline. To make it more robust, we can transfer the data to a metadata node and attach it to instructions reading from this pointer.
+Any sequence of constant values can be used. However, this annotation is expressed as a (uselss) function call which is optimized away later in the LLVM pipeline. To make it more robust, we can transfer the data to a metadata node, which is independent of optimizations, and attach it to instructions reading from this pointer. Here is a heavily abbreviated excerpt from a transformation pass to do this.
 
-\vfill\null
+%\vfill\null
 
 \begin{minted}{c++}
 // for each instruction:
@@ -123,7 +119,7 @@ Load->setMetadata("obfuscate", Node);
 }}}}
 \end{minted}
 
-We can access this data when building obfuscations
+We can access this data when building obfuscations:
 
 \begin{minted}{c++}
 // for each instruction
