@@ -50,7 +50,7 @@ LLVM passes are popular for implementing obfuscations. Techniques such as contro
 \vspace*{-0.5\baselineskip}
 \subsection*{Invariant-based MBA}
 
-As a simple example, consider a custom integer type that supports all the usual operations but internally stores the value $x$ as $2x$. If we have a function that takes an argument $x$ of this type, we could in principle replace every use of (the internal value of) this argument with $x + (x \& 1)$. For performance and simplicity reasons, most decompilers and deobfuscation tools will perform their analysis over all possible values and thus they are unable to simplify the expression back to $x$ since it can easily find a counter-example $1 + (1 \& 1) \neq 1$. This "conditional MBA" uses non-local information to strengthen the obfuscation. While we can perform a decent amount of source-level obfuscation where we do have access to the type information, it would be even better if we could get the best of two worlds: rich information about invariants from the source-level with the fine-grained control at the LLVM IR level.
+As a simple example, consider a custom integer type that supports all the usual operations but internally stores the value $x$ as $2x$. If we have a function that takes an argument $x$ of this type, we could in principle replace every use of (the internal value of) this argument with $x + (x \& 1)$. For performance and simplicity reasons, most decompilers and deobfuscation tools will perform their analysis over all possible values and thus they are unable to simplify the expression back to $x$ since it can easily find a counter-example $1 + (1 \& 1) \neq 1$. This ``conditional MBA" uses non-local information to strengthen the obfuscation. While we can perform a decent amount of source-level obfuscation where we do have access to the type information, it would be even better if we could get the best of two worlds: rich information about invariants from the source-level with the fine-grained control at the LLVM IR level.
 
 \vspace*{-0.5\baselineskip}
 \subsection*{Clang annotations}
@@ -77,69 +77,59 @@ call void @llvm.var.annotation.p0.p0(ptr %2,
 ptr @.str, ptr @.str.1, i32 2, ptr @.args)
 \end{minted}
 
-Any sequence of constant values can be used. However, this annotation is expressed as a (uselss) function call which is optimized away later in the LLVM pipeline. To make it more robust, we can transfer the data to a metadata node, which is independent of optimizations, and attach it to instructions reading from this pointer. Here is a heavily abbreviated excerpt from a transformation pass to do this.
+Any sequence of constant values can be used. However, this annotation is expressed as a (useless) function call which is optimized away later in the LLVM pipeline. To make it more robust, we can transfer the data to a metadata node, which is independent of optimizations, and attach it to instructions reading from this pointer. 
 
-%\vfill\null
+To do this, we need to create a transformation pass and insert it early in the pipeline. In this pass, we iterate over instructions and find the call to the generated annotation:
+
 
 \begin{minted}{c++}
 // for each instruction:
-if (auto *CI = dyn_cast<CallInst>(&I)) {
-Function *f = CI->getCalledFunction();
-if (f && f->getName()
-.starts_with("llvm.var.annotation")) {
-Value *annotatedPtr = 
-CI->getOperand(0)->stripPointerCasts(),
-*name = 
-CI->getArgOperand(1)->stripPointerCasts(),
-*anno = 
-CI->getArgOperand(4)->stripPointerCasts();
-LLVMContext &Ctx = CI->getContext();
-auto *GV1 = dyn_cast<GlobalVariable>(name);
-auto *CDA = dyn_cast<ConstantDataArray>(
-    GV1->getInitializer()
+auto *CI = dyn_cast<CallInst>(&I);
+
+CI->getCalledFunction()
+  ->getName()
+  .starts_with("llvm.var.annotation")
+\end{minted}
+
+We can then extract the arguments to this function call and chase those pointers to the global data containing our annotation data, which can be seen in the IR snippet listed previously.
+
+\begin{minted}{c++}
+auto *GV = dyn_cast<GlobalVariable>(
+    CI->getArgOperand(4)
+    ->stripPointerCasts()
 );
-StringRef nameStr = CDA->getAsCString();
-// if nameStr == "obf"
-auto *GV2 = dyn_cast<GlobalVariable>(anno);
-auto *CS = dyn_cast<ConstantStruct>(
-    GV2->getInitializer()
-);
-auto *CInt = dyn_cast<ConstantInt>(
-    CS->getOperand(0)
-);
-int param = CInt->getZExtValue();
-for (User *U : annotatedPtr->users()) {
-if (LoadInst *Load = dyn_cast<LoadInst>(U)) {
-ConstantInt *CInt = 
+GV->getInitializer();
+\end{minted}
+
+Once we have the obfuscation data, we can also find all the places where the annotated pointer is used and create and attach a metadata node with this data:
+
+\begin{minted}{c++}
+CI->getOperand(0)
+  ->stripPointerCasts()
+  ->users()
+
+// for each user
+auto *CInt = 
 ConstantInt::get(Type::getInt64Ty(Ctx), param);
-ConstantAsMetadata *IntMD = 
+auto *IntMD = 
 ConstantAsMetadata::get(CInt);
 MDNode *Node = MDNode::get(Ctx, IntMD);
 Load->setMetadata("obfuscate", Node);
-}}}}
+
 \end{minted}
 
-We can access this data when building obfuscations:
+Finally, at a later point, for example in a later pass, we can access this data when building obfuscations:
 
 \begin{minted}{c++}
 // for each instruction
 if (MDNode *N = I.getMetadata("obfuscate")) {
-Metadata *MD = N->getOperand(0);
-auto *CMD = dyn_cast<ConstantAsMetadata>(MD)
-auto *CI = dyn_cast<ConstantInt>(
-    CMD->getValue()
-)
-int64_t val = CI->getSExtValue();
-// Use IRBuilder to build obfuscation
-// Use I.replaceUsesWithIf(...) to 
-// replace expression with obfuscation
-}
+   ...
 \end{minted}
 
 \vspace*{-0.5\baselineskip}
 \subsection*{Conclusion}
 
-This specific invariant and metadata here is simple but can be expanded. By combining this with C++ templates and/or macros, complex relationships can be expressed resulting in obfuscations with global relationships which makes local-only analysis ineffective.
+This specific invariant and metadata here is simple but can be expanded. By combining this with C++ templates and/or macros, complex relationships can be expressed resulting in obfuscations with global relationships which makes local-only analysis ineffective. Maybe we want to use various divisibility properties, non-standard ways of representing integers or something even more exotic. What obfuscations can you come up with using this technique?
 
 %\vfill\null
 \end{document}
