@@ -1,0 +1,119 @@
+\documentclass[twocolumn]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[paperheight=252mm,paperwidth=174mm,margin=1mm,heightrounded]{geometry}
+\usepackage{ulem}
+\usepackage{array}
+\usepackage{listings}
+\usepackage{fvextra}
+\usepackage{amsmath}
+\usepackage{csquotes}
+\usepackage{hyperref}
+
+\usepackage{minted}
+
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows}
+\usetikzlibrary{positioning}
+
+%% Common TikZ libraries
+\usetikzlibrary{calc}
+
+%% Custom TikZ addons
+\usetikzlibrary{crypto.symbols}
+\tikzset{shadows=no}        % Option: add shadows to XOR, ADD, etc.
+
+\usepackage{color}
+\definecolor{light-gray}{rgb}{0.95,0.95,0.95}
+\setminted{bgcolor=light-gray}  % this line causes the problem
+
+\setlength{\parindent}{0mm}
+\setlength{\parskip}{0mm}
+
+\tikzstyle{string} = [rectangle, rounded corners, inner sep=2mm, text centered, draw=black, fill=red!30]
+\tikzstyle{bytes} = [rectangle, rounded corners, inner sep=2mm, text width=, text centered, draw=black, fill=blue!30]
+\tikzstyle{int} = [rectangle, rounded corners, inner sep=2mm, text width=,  text centered, draw=black, fill=green!30]
+\tikzstyle{arrow} = [thick,->,>=stealth]
+
+\begin{document}
+
+\title{Residue Number System for Obfuscation}
+\date{}
+%\maketitle
+
+\section*{Residue Number System \\ for Obfuscation}
+\vspace*{-0.5\baselineskip}
+
+Integer constants in code can be a useful starting point for reverse engineers looking for an area of interest. As a toy example, imagine a game where there is an enemy that causes 10 points of damage. While reversing the code, you search for the value 10 and find this function:
+
+\begin{minted}{c++}
+void sub_4011a0(int16_t* arg1) {
+  *(uint16_t*)arg1 -= 10;
+}
+\end{minted}
+
+This is a strong candidate for what we are looking for. Imagine instead that the function looked like this:
+
+\begin{minted}{c++}
+void sub_401150(u8* arg1) {
+  *(u8*)arg1 = (*(u8*)arg1 & 3) ^ 2;
+  u32 rax_1 = (u32)arg1[1];
+  arg1[1] = (u8)rax_1 + (char)-(
+    ((((rax_1 + 5) * 0x3334) >> 0x10) * 5)
+  ) + 5;
+  u32 rax_4 = (u32)arg1[2];
+  u64 rcx_8 = (u64)(
+    ((rax_4 + 3) * 0x13b2) >> 0x10
+  );
+  arg1[2] = (u8)rax_4 + (char)
+    -((int32_t)(rcx_8 + (
+      (u64)(u32)(rcx_8 * 3) << 2
+    ))) + 3;
+}
+\end{minted}
+
+You would have a much harder time finding it, let alone identifying that this is of interest. So what is going on here? An experienced reverse engineer might assume this is some kind of Mixed Boolean-Arithmetic obfuscation but that is not the case here. Instead of storing and processing the numbers as regular integers, we have transformed them into a Residue Number System.
+
+\vspace*{-0.5\baselineskip}
+\subsection*{Residue Number System}
+
+A Residue Number System, RNS, is defined by a set of $k$ pairwise coprime\footnote{there are variants without this property} integers: $m_1, m_2, \ldots, m_k$. This system can represent integers $0 \leq X < M$ by storing them as a vector $\{x_1, x_2, \ldots, x_k\}$ where each element is $x_i = X \mod{m_i}$. This vector can then be used to perform some of the same operations we are familiar with for regular integers. Addition, subtraction and multiplication are done pairwise modulo the corresponding moduli. For example $X + Y$ is calculated by creating a vector where each element is $x_i + y_i \pmod{m_i}$. The vector can be converted back to an integer using the Chinese Remainder Theorem. Equality can be checked pairwise too. We can also perform division with a constant by instead multiplying by the modular inverse (a common optimization for regular integers too). However, division with a variable, bitwise operations (e.g. XOR) and ordering are not easily done without expensive methods such as lookup tables or converting back to a regular integer. This means that using RNS for obfuscation is not a great fit for every situation and you need to consider what operations are most commonly needed.
+
+\vspace*{-0.5\baselineskip}
+\subsection*{Google CTF 2024: Not Obfuscated}
+
+As an example of this technique, I created a challenge for the 2024 Google CTF called Not Obfuscated\footnote{\url{https://github.com/google/google-ctf/tree/main/2024/quals/rev-notobfuscated}}. The challenge used $4 \times 4$ matrices where each element was an RNS vector with moduli $\{4, 5, 13\}$ (representing values $0 \leq x < 260$) and essentially computed \[\mathit{result} = ((\mathit{input} + B) \cdot A - C) \oplus D\] for some random matrices $A, B, C, D$. The RNS elements stored the vectors as three elements of 4 bits, packed into a 16-bit integer and the resulting compiled code became an absolutely horrible mess of SIMD instructions.
+
+\vspace*{-0.5\baselineskip}
+\subsection*{C++ Implementation}
+
+One of many ways to implement this obfuscation method is to use C++ templates:
+
+\begin{minted}{c++}
+template <class E, class V, E... M>
+class RNS {
+  static constexpr size_t L = sizeof...(M);
+  static constexpr array<E, L> Ms = {M...};
+private:
+    E value[L];
+...
+ constexpr RNS &operator+=(const RNS &o){
+  for (size_t i = 0; i < L; i++) {
+    value[i]=(value[i]+o.value[i])%Ms[i];
+   }
+  return *this;
+ }
+...
+typedef RNS<uint8_t, uint16_t, 4, 5, 13> rns;
+rns a(123);
+\end{minted}
+
+In this example, we create an RNS class that stores the $x_i$ values in an array of uint8\_t integers (simpler than the 4-bit packing described earlier) with moduli $4, 5, 13$ and uses uint16\_t to store the decoded value (decoding not shown).
+
+\vspace*{-0.5\baselineskip}
+\subsection*{Conclusion}
+
+Using a different way of representing numbers can make the analysis of the code more complicated and in the right context the performance overhead can be minimal. The individual residue operations are cheap and the small values can be kept in registers. It's not a one-size-fits-all obfuscation but a powerful tool to have in the obfuscation toolbox.
+
+
+%\vfill\null
+\end{document}
