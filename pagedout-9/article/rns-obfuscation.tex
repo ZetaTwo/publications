@@ -71,12 +71,12 @@ void sub_401150(u8* arg1) {
 }
 \end{minted}
 
-You would have a much harder time finding it, let alone identifying that this is of interest. So what is going on here? An experienced reverse engineer might assume this is some kind of Mixed Boolean-Arithmetic obfuscation but that is not the case here. Instead of storing and processing the numbers as regular integers, we have transformed them into a Residue Number System.
+You would have a much harder time finding it, let alone identifying that this is of interest. So what is going on here? An experienced reverse engineer might assume this is some kind of Mixed Boolean-Arithmetic obfuscation, but that is not the case here. Instead of storing and processing the numbers as regular integers, we have transformed them into a Residue Number System.
 
 \vspace*{-0.5\baselineskip}
 \subsection*{Residue Number System}
 
-A Residue Number System, RNS, is defined by a set of $k$ pairwise coprime\footnote{there are variants without this property} integers: $m_1, m_2, \ldots, m_k$ with product $M$. This system can represent integers $0 \leq X < M$ by storing them as a vector $\{x_1, x_2, \ldots, x_k\}$ where each element is $x_i = X \mod{m_i}$. This vector can then be used to perform some of the same operations we are familiar with for regular integers. Addition, subtraction and multiplication are done elementwise modulo the corresponding moduli. For example $X + Y$ is calculated by creating a vector where each component is $x_i + y_i \pmod{m_i}$. The vector can be converted back to an integer using the Chinese Remainder Theorem. Equality can be checked elementwise too. We can also perform division with a constant by instead multiplying by the modular inverse (a common optimization for regular integers too). However, general division, bitwise operations (e.g. XOR) and ordering are not easily done without expensive methods such as lookup tables or converting back to a regular integer. This means that using RNS for obfuscation is not a great fit for every situation and you need to consider what operations are most commonly needed.
+A Residue Number System, RNS, is defined by a set of $k$ pairwise coprime\footnote{there are variants without this property} integers: $m_1, m_2, \ldots, m_k$ with product $M$. This system can represent integers $0 \leq X < M$ by storing them as a vector $\{x_1, x_2, \ldots, x_k\}$ where each element is $x_i = X \mod{m_i}$. This vector can then be used to perform some of the same operations we are familiar with for regular integers. Addition, subtraction and multiplication are done elementwise modulo the corresponding moduli. For example $X + Y$ is calculated by creating a vector where each component is $x_i + y_i \pmod{m_i}$. The vector can be converted back to an integer using the Chinese Remainder Theorem. Equality can be checked elementwise too. We can also perform division with some constants by instead multiplying by the modular inverse (a common optimization for regular integers too). However, general division, bitwise operations (e.g. XOR) and ordering are not easily done without expensive methods such as lookup tables or converting back to a regular integer. This means that using RNS for obfuscation is not a great fit for every situation and you need to consider what operations are most commonly needed.
 
 \vspace*{-0.5\baselineskip}
 \subsection*{Google CTF 2024: Not Obfuscated}
@@ -94,16 +94,16 @@ class RNS {
   static constexpr size_t L = sizeof...(M);
   static constexpr array<E, L> Ms = {M...};
 private:
-    E value[L];
+  array<E, L> value;
 ...
- constexpr RNS &operator+=(const RNS &o){
-  for (size_t i = 0; i < L; i++) {
-    value[i]=(value[i]+o.value[i])%Ms[i];
-   }
-  return *this;
- }
+  constexpr RNS &operator+=(const RNS &o){
+    for (size_t i = 0; i < L; i++) {
+      value[i]=(value[i]+o.value[i])%Ms[i];
+    }
+    return *this;
+  }
 ...
-typedef RNS<uint8_t, uint16_t, 4, 5, 13> rns;
+using rns = RNS<uint8_t, uint16_t, 4, 5, 13>;
 rns a(123);
 \end{minted}
 
@@ -112,7 +112,7 @@ In this example, we create an RNS class that stores the $x_i$ values in an array
 \vspace*{-0.5\baselineskip}
 \subsection*{Conclusion}
 
-Using a different way of representing numbers can make the analysis of the code more complicated and in the right context the performance overhead can be minimal. The individual residue operations are cheap and the small values can be kept in registers. It's not a one-size-fits-all obfuscation but a powerful tool to have in the obfuscation toolbox.
+Using a different way of representing numbers can make the analysis of the code more complicated, and in the right context the performance overhead can be minimal. The individual residue operations are cheap, and the small values can be kept in registers. It's not a one-size-fits-all obfuscation, but a powerful tool to have in the obfuscation toolbox.
 
 
 %\vfill\null
